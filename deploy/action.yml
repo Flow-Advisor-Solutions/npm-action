@@ -21,10 +21,6 @@ inputs:
     description: 'The version of terraform to use.'
     required: true
     default: "1.0.7"
-  workflow:
-    description: 'The workflow yaml file to use.'
-    required: true
-    default: "build.yml"
   package_name:
     description: 'The name of the package to use for terraform deployment.'
     required: true
@@ -45,9 +41,8 @@ runs:
   using: "composite"
   steps:
     - name: download
-      uses: dawidd6/action-download-artifact@v2
+      uses: actions/download-artifact@v2
       with:
-        workflow: ${{ inputs.workflow }}
         name: ${{ inputs.package_name }}
         path: ${{ inputs.package_path }}
 
