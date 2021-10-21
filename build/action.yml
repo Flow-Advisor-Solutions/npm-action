@@ -1,0 +1,81 @@
+name: 'A module to build npm packages.'
+description: 'Deploys terraform to an environment'
+inputs:
+  github_access_token:
+    description: 'The GIT hub access token to upload to the github package registry.'
+    required: true
+  node_version:
+    description: 'The version of node to build with.'
+    required: true
+    default: '14.17.0'
+  node_registry_url:
+    description: 'The url of the node registry to download modules from.'
+    required: true
+    default: 'https://npm.pkg.github.com'
+  semantic_release_changelog_version:
+    description: 'The aws access key to use with terraform.'
+    required: true
+    default: '6.0.0'
+  semantic_release_git_version:
+    description: 'The aws access key to use with terraform.'
+    required: true
+    default: '10.0.0'
+  package_name:
+    description: 'The name of the package to use for terraform deployment.'
+    required: true
+    default: "package"
+  package_file_name:
+    description: 'The file name of the package to deploy.'
+    required: true
+    default: "package.zip"
+runs:
+  using: "composite"
+  steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: setup
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ inputs.node_version }}
+        registry-url: ${{ inputs.node_registry_url }}
+
+    - name: cache
+      uses: actions/cache@v2
+      env:
+        cache-name: node_modules
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package.json')}}-${{ hashFiles('**/package-lock.json')}}
+        # Caching dependencies https://docs.github.com/en/free-pro-team@latest/actions/guides/caching-dependencies-to-speed-up-workflows#example-using-the-cache-action
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+
+    - name: install
+      shell: bash
+      run: |
+        npm install
+        npm install --save-dev @semantic-release/changelog@${{ inputs.semantic_release_changelog_version }} @semantic-release/git@${{ inputs.semantic_release_git_version }}
+
+    - name: archive
+      shell: bash
+      run: npm pack
+
+    - name: publish
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_access_token }}
+        NPM_TOKEN: ${{ inputs.github_access_token }}
+        NODE_AUTH_TOKEN: ${{ inputs.github_access_token }}
+      run: |
+        npx semantic-release
+        tar -zxf *.tgz
+        zip -r ${{ inputs.package_file_name }} package
+
+    - name: artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ inputs.package_name }}
+        path: ${{ inputs.package_file_name }}

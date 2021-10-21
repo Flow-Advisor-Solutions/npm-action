@@ -1,0 +1,82 @@
+name: 'Terraform Deploy'
+description: 'Deploys terraform to an environment'
+inputs:
+  git_ssh_private_key:
+    description: 'Private key of the terraform git repos.'
+    required: true
+  environment:
+    description: 'The environment to deploy to.'
+    required: true
+  aws_access_key_id:
+    description: 'The aws access key to use with terraform.'
+    required: true
+  aws_secret_access_key_id:
+    description: 'The aws access key to use with terraform.'
+    required: true
+  aws_region:
+    description: 'The aws region to deploy to.'
+    required: true
+    default: "ca-central-1"
+  terraform_version:
+    description: 'The version of terraform to use.'
+    required: true
+    default: "1.0.7"
+  workflow:
+    description: 'The workflow yaml file to use.'
+    required: true
+    default: "build.yml"
+  package_name:
+    description: 'The name of the package to use for terraform deployment.'
+    required: true
+    default: "package"
+  package_file_name:
+    description: 'The file name of the package to deploy.'
+    required: true
+    default: "package.zip"
+  package_path:
+    description: 'The path to extract the package to.'
+    required: true
+    default: "."
+  deploy_directoy:
+    description: 'The directory containing terraform files to deploy.'
+    required: true
+    default: "package/deploy"
+runs:
+  using: "composite"
+  steps:
+    - name: download
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: ${{ inputs.workflow }}
+        name: ${{ inputs.package_name }}
+        path: ${{ inputs.package_path }}
+
+    - name: ssh
+      uses: hashicorp/setup-terraform@v1.3.2
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - shell: bash
+      env:
+        SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+        echo "${{ inputs.git_ssh_private_key }}" > ~/.ssh/id_rsa
+        chmod 400 ~/.ssh/id_rsa
+
+    - name: deploy
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ inputs.aws_access_key_id }}
+        aws-secret-access-key: ${{ inputs.aws_secret_access_key_id }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - shell: bash
+      run: |
+        unzip ${{ inputs.package_file_name }}
+        cd ${{ inputs.deploy_directoy }}
+        terraform init
+        terraform workspace select ${{ github.job }} || terraform workspace new ${{ inputs.environment }}
+        terraform apply -auto-approve -var environment=${{ inputs.environment }}
